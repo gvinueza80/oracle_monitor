@@ -14,6 +14,7 @@ from prometheus_client import Counter, Histogram, generate_latest
 from app.config import settings
 from app.middleware import auth, logging as log_middleware
 from app.routers import metrics, alerts, instances, users, health, auth
+from app.websocket import websocket_endpoint
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,12 @@ app.include_router(
     prefix="/api/users",
     tags=["Users"]
 )
+
+
+# WebSocket endpoint
+@app.websocket("/api/ws/metrics/{instance_id}")
+async def ws_endpoint(websocket, instance_id, token: str):
+    await websocket_endpoint(websocket, instance_id, token)
 
 
 if __name__ == "__main__":
