@@ -13,7 +13,7 @@ from prometheus_client import Counter, Histogram, generate_latest
 
 from app.config import settings
 from app.middleware import auth, logging as log_middleware
-from app.routers import metrics, alerts, instances, users, health
+from app.routers import metrics, alerts, instances, users, health, auth
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +101,12 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # Include routers
+app.include_router(
+    auth.router,
+    prefix="/api/auth",
+    tags=["Authentication"]
+)
+
 app.include_router(
     health.router,
     prefix="/api",
