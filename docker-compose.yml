@@ -1,0 +1,199 @@
+version: '3.8'
+
+services:
+  # PostgreSQL - primary data store for metrics, logs, and configuration
+  postgres:
+    image: postgres:15-alpine
+    container_name: oracle_monitor_postgres
+    environment:
+      POSTGRES_DB: oracle_monitor
+      POSTGRES_USER: oracle_monitor
+      POSTGRES_PASSWORD: dev_password_change_me
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/init_schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oracle_monitor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - oracle_monitor_net
+
+  # Redis - caching and session store
+  redis:
+    image: redis:7-alpine
+    container_name: oracle_monitor_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - oracle_monitor_net
+
+  # FastAPI Backend Service
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: oracle_monitor_api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://oracle_monitor:dev_password_change_me@postgres:5432/oracle_monitor
+      REDIS_URL: redis://redis:6379
+      SECRET_KEY: dev-secret-key-change-in-production
+      ENVIRONMENT: development
+      LOG_LEVEL: debug
+      ORACLE_INSTANCES: '[{"name":"test","user":"monitor","password":"monitor","dsn":"oracle:1521/XEPDB1"}]'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - oracle_monitor_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Celery Worker - async task processing for metric collection
+  celery:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: oracle_monitor_celery
+    environment:
+      DATABASE_URL: postgresql://oracle_monitor:dev_password_change_me@postgres:5432/oracle_monitor
+      REDIS_URL: redis://redis:6379
+      SECRET_KEY: dev-secret-key-change-in-production
+      ENVIRONMENT: development
+      ORACLE_INSTANCES: '[{"name":"test","user":"monitor","password":"monitor","dsn":"oracle:1521/XEPDB1"}]'
+    depends_on:
+      - postgres
+      - redis
+      - api
+    volumes:
+      - ./backend:/app
+    command: celery -A collector.tasks worker -l info --concurrency=2
+    networks:
+      - oracle_monitor_net
+
+  # Celery Beat Scheduler - schedules periodic metric collection jobs
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: oracle_monitor_celery_beat
+    environment:
+      DATABASE_URL: postgresql://oracle_monitor:dev_password_change_me@postgres:5432/oracle_monitor
+      REDIS_URL: redis://redis:6379
+      SECRET_KEY: dev-secret-key-change-in-production
+      ENVIRONMENT: development
+      ORACLE_INSTANCES: '[{"name":"test","user":"monitor","password":"monitor","dsn":"oracle:1521/XEPDB1"}]'
+    depends_on:
+      - postgres
+      - redis
+      - api
+    volumes:
+      - ./backend:/app
+    command: celery -A collector.tasks beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    networks:
+      - oracle_monitor_net
+
+  # Mock Oracle Database (for development/testing)
+  # Replace with actual Oracle instance in production
+  oracle:
+    image: container-registry.oracle.com/database/express:21.3.0
+    container_name: oracle_monitor_oracle
+    environment:
+      ORACLE_PWD: oracle
+      ORACLE_SID: XE
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+    networks:
+      - oracle_monitor_net
+    # Note: Oracle image requires significant resources (4GB RAM minimum)
+    # Comment out if not needed for development; use real instance in docker-compose.override.yml
+
+  # Web Frontend (React + Node.js)
+  web:
+    build:
+      context: ./web/frontend
+      dockerfile: Dockerfile
+    container_name: oracle_monitor_web
+    ports:
+      - "3000:3000"
+    environment:
+      REACT_APP_API_URL: http://localhost:8000
+      REACT_APP_WS_URL: ws://localhost:8000
+    depends_on:
+      - api
+    volumes:
+      - ./web/frontend/src:/app/src
+      - ./web/frontend/public:/app/public
+    command: npm start
+    networks:
+      - oracle_monitor_net
+
+  # Prometheus - metrics scraping and storage
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: oracle_monitor_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    networks:
+      - oracle_monitor_net
+
+  # Grafana - visualization and dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: oracle_monitor_grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - oracle_monitor_net
+
+networks:
+  oracle_monitor_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  oracle_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
