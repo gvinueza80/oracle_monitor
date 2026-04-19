@@ -1,0 +1,77 @@
+name: oracle_monitor
+description: Real-time Oracle database monitoring app for iOS, Android, and Web.
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # HTTP and API
+  http: ^1.1.0
+  dio: ^5.3.0
+
+  # State Management
+  riverpod: ^2.4.0
+  flutter_riverpod: ^2.4.0
+
+  # Local Storage
+  hive: ^2.2.0
+  hive_flutter: ^1.1.0
+
+  # UI Components
+  flutter_svg: ^2.0.0
+  google_fonts: ^6.0.0
+
+  # DateTime
+  intl: ^0.19.0
+
+  # WebSocket
+  web_socket_channel: ^2.4.0
+
+  # JSON
+  json_annotation: ^4.8.1
+
+  # Secure Storage
+  flutter_secure_storage: ^9.0.0
+
+  # Push Notifications
+  firebase_messaging: ^14.7.0
+  firebase_core: ^2.24.0
+
+  # Analytics
+  firebase_analytics: ^10.6.0
+
+  # Environment
+  flutter_dotenv: ^5.1.0
+
+  # Logging
+  logger: ^2.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^3.0.0
+  hive_generator: ^2.0.0
+  json_serializable: ^6.7.1
+  build_runner: ^2.4.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/
+    - .env
+
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+        - asset: assets/fonts/Roboto-Bold.ttf
+          weight: 700

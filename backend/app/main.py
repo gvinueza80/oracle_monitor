@@ -13,7 +13,7 @@ from prometheus_client import Counter, Histogram, generate_latest
 
 from app.config import settings
 from app.middleware import auth, logging as log_middleware
-from app.routers import metrics, alerts, instances, users, health, auth
+from app.routers import metrics, alerts, instances, users, health, auth, analytics
 from app.websocket import websocket_endpoint
 
 logger = logging.getLogger(__name__)
@@ -136,6 +136,12 @@ app.include_router(
     users.router,
     prefix="/api/users",
     tags=["Users"]
+)
+
+app.include_router(
+    analytics.router,
+    prefix="/api/analytics",
+    tags=["Analytics"]
 )
 
 
