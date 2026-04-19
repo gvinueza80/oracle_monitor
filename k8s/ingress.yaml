@@ -1,0 +1,112 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: oracle-monitor
+  labels:
+    name: oracle-monitor
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oracle-monitor
+  namespace: oracle-monitor
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - oracle-monitor.example.com
+    secretName: oracle-monitor-tls
+  rules:
+  - host: oracle-monitor.example.com
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: oracle-monitor-api
+            port:
+              number: 80
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: oracle-monitor-frontend
+            port:
+              number: 80
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: admin@example.com
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    - http01:
+        ingress:
+          class: nginx
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: oracle-monitor-api
+  namespace: oracle-monitor
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: oracle-monitor-api
+  namespace: oracle-monitor
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: oracle-monitor-api
+  namespace: oracle-monitor
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: oracle-monitor-api
+subjects:
+- kind: ServiceAccount
+  name: oracle-monitor-api
+  namespace: oracle-monitor
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oracle-monitor-config
+  namespace: oracle-monitor
+data:
+  redis-url: redis://oracle-monitor-redis:6379/0
+  api-url: https://oracle-monitor.example.com/api
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: oracle-monitor-secrets
+  namespace: oracle-monitor
+type: Opaque
+stringData:
+  database-url: postgresql+asyncpg://postgres:POSTGRES_PASSWORD@oracle-monitor-postgres:5432/oracle_monitor
+  postgres-password: change-me-in-production
+  jwt-secret: your-jwt-secret-key-change-in-production
